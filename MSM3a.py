@@ -1,30 +1,5 @@
-##  MSM estimation
-##    Test case Unemployment Quarterly model
+##  MSM set up and estimation
 ##    M Boldin   June/July 2018
-
-## Expected results
-##        MSM estimation
-##        2018-07-05 16:04:01.462451
-##        Starting Values: [0.0073141794305075225, 0.1074581804529243, 0.9865332520406973, 0.9865332520406973, 0.2707890811252287, 0.2707890811252287, 0.7, 0.3]  
-##           LogLik 0: -13.61713055418656
-##        Results-- Llv: -39.62150572085464 | Method: BFGS          Status:    2 | 
-##        Iter:   28 Evals: 1222 -- Time: 1.8 seconds
-##        Desired error not necessarily achieved due to precision loss.
-##        Estimated values: [0.03997804 0.11060476 0.97291618 1.03896481 0.13088873 0.31906573
-##         0.96988698 0.12478534]
-##
-##        Bs
-##        [[0.03997804 0.11060476]
-##         [0.97291618 1.03896481]]
-##        sees
-##        [[0.13088873 0.31906573]]
-##        Q
-##        [[0.96988698 0.03011302]
-##         [0.12478534 0.87521466]]
-##        po
-##        [[0.80559496 0.19440504]]
-##        39.628956173929645
-##        >>>
 
 #################################################################
 
@@ -86,44 +61,6 @@ def repmat(a,r=1,c=1):
     return kron(np.ones((r,c)),a)
 
 ##################################################################
-def OLScalc(y,X):
-    """Compute OLS parameters, includ LogLike
-    """
-    
-    y = matrix(y)
-    if y.shape[0] == 1:
-        y = y.T
-    X = matrix(X)
-    k = X.shape[1]
-    nobs = len(y)
-    
-    iXtX= (X.T*X).I
-    B = (iXtX)*(X.T*y)
-    
-    e = y - X*B    
-    see = np.std(e)
-    
-    C = (iXtX)*see**2
-    Bse = np.sqrt(C.diagonal()).T
-
-    R2  = 1 - e.var()/y.var()
-
-    ##Likelihood calc
-    a = 1 / ( sqrt(2*np.pi)*see )
-    e2 = np.power(e,2)/see**2
-    f = a*np.exp(-.5*e2)
-    lpt = 1
-    for t in range(nobs):
-        lpt = lpt * f[t]
-    llv = log(lpt)
-
-    print('OLS calc')
-    M = np.zeros((k,2))
-    M[:,0]= B.T
-    M[:,1]= Bse.T
-    print(M)
-    print(nobs, see, R2, llv)
-    return (B, Bse, see)
 
 
 def MSMloglike(Bs,sees,Q, po, y, X):
@@ -322,7 +259,7 @@ class msmset1():
         return -llv
 
     def maxlik(self, svalues, method):
-        #results = minimize(self.msmlik, svalues, method=method, tol=1E-8)
+        #results = minimize(m.msmlik, svalues, method=method, tol=1E-8)
         results = minimize(self.msmloglike, svalues, method=method, tol=1E-8)
         self.results = results
 
@@ -398,138 +335,4 @@ def ShowExtra(m):
     print( 'un1: %.2f  un2: %.2f' % (un1, un2) )
     print()    
     return m
-
-###################################################
-
-## Data Setup for Unemployment model
-
-ddir1= r'/home/michael/Desktop/PyProg/MSM/Set3'
-dx = pd.read_excel( os.path.join(ddir1,'unrate.xlsx') )
-#print(dx)
-
-Yvar = 'UNRATE'
-Xvar = ['C','lag']
-y = dx.loc[:,'UNRATE']
-nobs =len(y)
-
-datx = pd.DataFrame(y)
-datx['C'] = ones((nobs,1))
-datx['lag'] = dx['lag']
-
-y = matrix(datx.loc[:,Yvar]).transpose()
-X = matrix(datx.loc[:,Xvar])
-
-
-## MSM setup check
-ns = 2
-k = 2
-bh1 = [-0.1, 0.1, 1.0, 1.0, .30 , .30, .80, 0.2 ]
-bhx = array(bh1)
-
-method = 'BFGS'
-
-#####################################################################
-
-
-if 1:
-
-    ## OLS case
-    y, X = (datx[Yvar], datx[Xvar])
-    (B, Bse, see) = OLScalc(y,X)
-
-if 1:
-
-    print()
-    m = msmset1(ns=2, k=2, y=y, X=X)    
-
-    rmse = see.item()
-    adj = 0.5*Bse[0].item()
-    sv1a = [ B[0].item() - adj, B[0].item() + adj, B[1].item(), B[1].item(), rmse, rmse, .70, .30 ]
-    sv1b = [0.3, 0.8, 0.90, 0.90, .25 , .25, .90, .10 ]
-
-    run_minimize(m, svalues= sv1a, method=method)
-    #ShowExtra(m)
-
-if 0:
-    datx2 = pd.DataFrame(dx)
-    datx2.set_index('Date', inplace=True)
-    unrate = datx2.loc[:,'UNRATE']
-    lag = datx2.loc[:,'lag']
-    msm2 = sm.tsa.MarkovRegression(endog=unrate, exog=lag, k_regimes=2, switching_exog=True, switching_variance=True)
-
-    #results1 = msm2.fit(method = 'bfgs')
-    #print( results1.summary())
-
-    sv2 = [ .50, .50, B[0] - adj, B[0] + adj, B[1], B[1], rmse**2, rmse**2 ]
-    results2 = msm2.fit(start_params= sv2, method = 'bfgs')
-    print( results2.summary())
-    results2 = msm2.fit(start_params= sv2, order=2, method = 'bfgs')
-    print( results2.summary())
-
-    #sv3 = [  0.974,    0.213,  -0.033,  -0.836,    0.991,    1.251,    0.03,  0.03 ]   
-    #results3 = msm2.fit(start_params= sv3, method = 'bfgs')
-    #print( results3.summary())
-
-
-if 0:
-
-    print()
-    y = matrix(datx.loc[:,Yvar]).transpose()
-    X = matrix(datx.loc[:,Xvar])
-    
-    B = results0.params
-    Bse = results0.bse
-    rmse = results0.mse_resid**.5
-    adj = 0.1*Bse[0]
-    rmse = results0.mse_resid**.5
-    bhx = [ B[0] - adj, B[0] + adj, B[1], B[1], rmse, rmse, .50, .50 ]
-    bhx = [0.3, 0.8, 0.90, 0.90, .25 , .25, .90, .10 ]
-    #bhx = [0.13704220855276644, 0.0969433157605557, 1.171131531783023, 1.14096519373727, 0.282600849714314, 0.18910405164493635, 0.9452539913014765, 0.16063851485499858] 
-    bhx = [0.039719795598223445, 0.11619930235234315, 0.9116977999149455, 0.9563886231411491, 0.12459361383176258, 0.3481463643972497, 0.9688856291695168, 0.11814517402945801]
-
-    m = msmset1(ns=2, k=2, y=y, X=X)    
-    m.update(bhx)
-    m.calcllv2()
-    px= (bhx, m.llv)
-    msg = 'Starting Values: %s  \n LL value: %s' % px
-    print( msg )
-    print( msmlik(bhx), m.llv )
-
-    dt1= dt.now() 
-    results = minimize(msmlik, bhx, method= method, tol=1E-2)
-    timex = dt.now() - dt1
-    timex = timex.seconds + timex.microseconds/1E6
-
-    px= (method, results.fun, results.nit, timex, results.status,)
-    msg = 'MSM Estimation | Method: %-10s  -LLV: %8s | Iter: %4d  Time: %.1f seconds | Status: %4s ' % px
-    print( msg )
-    if not results.status == 0:
-        print(results.message)
-    print(results.x)
-    
-
-if 0:
-    ## Time LLV calc
-    Bs = m.Bs
-    sees = m.sees
-    Q = m.Q
-    po = lpo(Q)
-    e = y - X*Bs    
-    nobs = len(e)
-    a = 1 / ( sqrt(2*np.pi)*sees )
-    a = repmat(a, nobs) 
-    e2 = np.power(e/sees,2)
-    f1 = np.exp(-.5*e2)
-    Fs =  np.multiply(a,f1) 
-    dt1= dt.now()
-    N = 1
-    for k in range(N):
-        llv1 = MSMllv1(Fs, Q, po)
-        lpt = MSMllv2b(Fs, Q, po)
-        llv2 = log(np.sum(lpt))
-        #print(k,m.llv)
-    timex = dt.now() - dt1
-    timex = timex.seconds + timex.microseconds/1E6
-    print(timex, k, m.llv, llv1, llv2)
-
 
